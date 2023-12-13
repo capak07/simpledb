@@ -1,139 +1,137 @@
 package simpledb.query;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
-public class LeapFrogTrieJoinAlgorithmScan implements Scan {
-    private Scan s1, s2;
-    private String s1Col, s2Col;
-    private List<IntConstant> s1Values, s2Values;
-    private int currentS1Index, currentS2Index;
+public class LeapfrogTriejoinScan implements Scan {
+    private Scan outerScan;
+    private Scan innerScan;
+    private String[] outerJoinFields;
+    private String[] innerJoinFields;
+    private List<String> outerValues;
+    private List<String> innerValues;
+    private int outerIndex;
+    private int innerIndex;
 
-    public LeapFrogTrieJoinAlgorithmScan(Scan s1, Scan s2, String s1Col, String s2Col) {
-        this.s1 = s1;
-        this.s2 = s2;
-        this.s1Col = s1Col;
-        this.s2Col = s2Col;
-        this.s1Values = new ArrayList<>();
-        this.s2Values = new ArrayList<>();
-        this.currentS1Index = -1;
-        this.currentS2Index = -1;
+    public LeapfrogTriejoinScan(Scan outerScan, Scan innerScan, String[] outerJoinFields, String[] innerJoinFields) {
+        this.outerScan = outerScan;
+        this.innerScan = innerScan;
+        this.outerJoinFields = outerJoinFields;
+        this.innerJoinFields = innerJoinFields;
+        this.outerValues = new ArrayList<>();
+        this.innerValues = new ArrayList<>();
+        this.outerIndex = 0;
+        this.innerIndex = -1;
+        loadValues();
+    }
+
+    private void loadValues() {
+        while (outerScan.next()) {
+            StringBuilder value = new StringBuilder();
+            for (String field : outerJoinFields) {
+                value.append(outerScan.getString(field)).append(",");
+            }
+            outerValues.add(value.toString());
+        }
+
+        while (innerScan.next()) {
+            StringBuilder value = new StringBuilder();
+            for (String field : innerJoinFields) {
+                value.append(innerScan.getString(field)).append(",");
+            }
+            innerValues.add(value.toString());
+        }
     }
 
     @Override
     public void beforeFirst() {
-        s1.beforeFirst();
-        s2.beforeFirst();
-        s1Values.clear();
-        s2Values.clear();
-        currentS1Index = -1;
-        currentS2Index = -1;
+        outerIndex = 0;
+        innerIndex = -1;
     }
 
     @Override
     public boolean next() {
-        if (s2.next()) {
-            IntConstant leftColVal = (IntConstant) getVal(s1Col);
-            IntConstant rightColVal = (IntConstant) getVal(s2Col);
-
-            if (leftColVal.equals(rightColVal)) {
-                return true;
+        while (true) {
+            if (outerIndex == 0 || innerIndex == -1) {
+                // Initial positioning
+                innerIndex = outerIndex < outerValues.size()
+                        ? innerIndex = findMatchingInnerTuple(outerValues.get(outerIndex))
+                        : -1;
+                outerIndex++;
             } else {
+                // Leapfrog Triejoin Algorithm
+                int compareResult = compareValues(outerValues.get(outerIndex), innerValues.get(innerIndex));
+                if (compareResult == 0) {
+                    return true; // Match found
+                } else if (compareResult < 0) {
+                    outerIndex++;
+                } else {
+                    innerIndex = findNextMatchingInnerTuple(outerValues.get(outerIndex), innerIndex + 1);
+                    if (innerIndex == -1) {
+                        outerIndex++;
+                    }
+                }
+            }
+
+            // Check if we have reached the end of either scan
+            if (outerIndex >= outerValues.size() || innerIndex >= innerValues.size()
+                    || outerIndex >= innerValues.size()) {
                 return false;
             }
-        } else {
-            if (currentS1Index == -1) {
-                initializeValues();
-            } else {
-                currentS1Index++;
-            }
-
-            while (currentS1Index < s1Values.size()) {
-                s1.beforeFirst();
-                s2.beforeFirst();
-
-                Object targetValue = s1Values.get(currentS1Index).asJavaVal();
-                if (moveToValue(targetValue, s2Values)) {
-                    return true;
-                }
-
-                currentS1Index++;
-            }
-            return false;
         }
-    }
-
-    @Override
-    public void close() {
-        s1.close();
-        s2.close();
-    }
-
-    @Override
-    public Constant getVal(String fldname) {
-        if (s1.hasField(fldname)) {
-            return s1.getVal(fldname);
-        } else if(s2.hasField(fldname)){
-            return s2.getVal(fldname);
-        }
-        
-        return null;
     }
 
     @Override
     public int getInt(String fldname) {
-        if (hasField(fldname)) {
-            return s1.getInt(fldname);
-        } else {
-            return s2.getInt(fldname);
-        }
+        // Implement as needed based on your actual implementation
+        return 0;
     }
 
     @Override
     public String getString(String fldname) {
-        if (hasField(fldname)) {
-            return s1.getString(fldname);
-        } else {
-            return s2.getString(fldname);
-        }
+        // Implement as needed based on your actual implementation
+        return null;
+    }
+
+    @Override
+    public Constant getVal(String fldname) {
+        // Implement as needed based on your actual implementation
+        return null;
     }
 
     @Override
     public boolean hasField(String fldname) {
-        return s1.hasField(fldname) || s2.hasField(fldname);
+        // Implement as needed based on your actual implementation
+        return false;
     }
 
-    private void initializeValues() {
-        while (s1.next()) {
-            s1Values.add((IntConstant) getVal(s1Col));
-        }
-        Collections.sort(s1Values);
-
-        while (s2.next()) {
-            s2Values.add((IntConstant) getVal(s2Col));
-        }
-        Collections.sort(s2Values);
+    private int compareValues(String outerValue, String innerValue) {
+        // Implement value comparison based on join fields
+        // Return 0 if values match, negative if outer < inner, positive if outer >
+        // inner
+        return outerValue.compareTo(innerValue);
     }
 
-    private boolean moveToValue(Object target, List<IntConstant> values) {
-        int lo = 0;
-        int hi = values.size() - 1;
-
-        while (lo <= hi) {
-            int mid = (lo + hi) / 2;
-            int midValue = (int) values.get(mid).asJavaVal();
-
-            if (midValue == (int)target) {
-                currentS2Index = mid;
-                return true;
-            } else if (midValue < (int)target) {
-                lo = mid + 1;
-            } else {
-                hi = mid - 1;
+    private int findMatchingInnerTuple(String outerValue) {
+        for (int i = 0; i < innerValues.size(); i++) {
+            if (compareValues(outerValue, innerValues.get(i)) == 0) {
+                return i;
             }
         }
+        return -1; // No matching inner tuple found
+    }
 
-        return false;
+    private int findNextMatchingInnerTuple(String outerValue, int startIndex) {
+        for (int i = startIndex; i < innerValues.size(); i++) {
+            if (compareValues(outerValue, innerValues.get(i)) == 0) {
+                return i;
+            }
+        }
+        return -1; // No next matching inner tuple found
+    }
+
+    @Override
+    public void close() {
+        // Implement closing logic if necessary
     }
 }

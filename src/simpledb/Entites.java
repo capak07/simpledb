@@ -14,15 +14,16 @@ public class Entites {
         Transaction tx = new Transaction();
         MetadataMgr mdMgr = SimpleDB.mdMgr();
 
-        TableInfo dti = mdMgr.getTableInfo("dept", tx);
+        TableInfo dti = mdMgr.getTableInfo("DEPT", tx);
         Scan s1 = new TableScan(dti, tx);
-        TableInfo cti = mdMgr.getTableInfo("course", tx);
+        TableInfo cti = mdMgr.getTableInfo("COURSE", tx);
         Scan s2 = new TableScan(cti, tx);
 
         // Leapfrog triejoin between dept and course on DId=DeptId
-        Scan s3 = new LeapFrogTrieJoinAlgorithmScan(s1, s2, "did", "deptid");
+        Scan s3 = new LeapfrogTriejoinScan(s1, s2, new String[] { "DId" }, new String[] { "DeptId" });
+
         // Selection predicate for section
-        Predicate pred3 = new Predicate(new Term(new FieldNameExpression("cid"), new FieldNameExpression("courseid")));
+        Predicate pred3 = new Predicate(new Term(new FieldNameExpression("CId"), new FieldNameExpression("CourseId")));
 
         // Combine the results with the section scan
         Scan s4 = new ProductScan(s3, s2);
